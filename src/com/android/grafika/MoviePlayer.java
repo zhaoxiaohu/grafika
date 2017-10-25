@@ -37,7 +37,7 @@ import java.nio.ByteBuffer;
  */
 public class MoviePlayer {
     private static final String TAG = MainActivity.TAG;
-    private static final boolean VERBOSE = false;
+    private static final boolean VERBOSE = true;
 
     // Declare this here to reduce allocations.
     private MediaCodec.BufferInfo mBufferInfo = new MediaCodec.BufferInfo();
@@ -295,8 +295,18 @@ public class MoviePlayer {
         // If you want to experiment, set the VERBOSE flag to true and watch the behavior
         // in logcat.  Use "logcat -v threadtime" to see sub-second timing.
 
+        /**
+         * 获取MediaCodec根据配置创建的buf
+         */
         final int TIMEOUT_USEC = 10000;
         ByteBuffer[] decoderInputBuffers = decoder.getInputBuffers();
+        if (VERBOSE) {
+            Log.d(TAG, "decoderInputBuffers size: " + decoderInputBuffers.length);
+        }
+        ByteBuffer[] decoderOutputBuffers = decoder.getOutputBuffers();
+        if (VERBOSE) {
+            Log.d(TAG, "decoderOutputBuffers size: " + decoderOutputBuffers.length);
+        }
         int inputChunk = 0;
         long firstInputTimeNsec = -1;
 
@@ -311,6 +321,7 @@ public class MoviePlayer {
 
             // Feed more data to the decoder.
             if (!inputDone) {
+                // 获取可用input buf的index
                 int inputBufIndex = decoder.dequeueInputBuffer(TIMEOUT_USEC);
                 if (inputBufIndex >= 0) {
                     if (firstInputTimeNsec == -1) {
@@ -327,6 +338,11 @@ public class MoviePlayer {
                         inputDone = true;
                         if (VERBOSE) Log.d(TAG, "sent input EOS");
                     } else {
+
+                        if (VERBOSE) {
+                            Log.d(TAG, "inputBufIndex " + inputBufIndex );
+                        }
+
                         if (extractor.getSampleTrackIndex() != trackIndex) {
                             Log.w(TAG, "WEIRD: got sample from track " +
                                     extractor.getSampleTrackIndex() + ", expected " + trackIndex);
@@ -347,13 +363,14 @@ public class MoviePlayer {
             }
 
             if (!outputDone) {
+                // 获取可用output buf的index
                 int decoderStatus = decoder.dequeueOutputBuffer(mBufferInfo, TIMEOUT_USEC);
                 if (decoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
                     // no output available yet
                     if (VERBOSE) Log.d(TAG, "no output from decoder available");
                 } else if (decoderStatus == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
                     // not important for us, since we're using Surface
-                    if (VERBOSE) Log.d(TAG, "decoder output buffers changed");
+                    if (VERBOSE) Log.d(TAG, "decoder output buffers changed. size: " + decoder.getOutputBuffers().length);
                 } else if (decoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                     MediaFormat newFormat = decoder.getOutputFormat();
                     if (VERBOSE) Log.d(TAG, "decoder output format changed: " + newFormat);
@@ -390,6 +407,7 @@ public class MoviePlayer {
                     if (doRender && frameCallback != null) {
                         frameCallback.preRender(mBufferInfo.presentationTimeUs);
                     }
+                    // release output buffer and output buffer to surface
                     decoder.releaseOutputBuffer(decoderStatus, doRender);
                     if (doRender && frameCallback != null) {
                         frameCallback.postRender();
